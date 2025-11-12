@@ -1,0 +1,463 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // or "postgresql" for production
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  password    String
+  role        UserRole
+  profile     UserProfile?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  status    UserStatus @default(Active)
+  lastLogin DateTime?
+  loginAttempts Int @default(0)
+  lockedUntil DateTime?
+
+  // Relations
+  patients    Patient[]
+  appointments Appointment[]
+  medicalRecords MedicalRecord[]
+  prescriptions Prescription[]
+  labResults  LabResult[]
+  billing     Billing[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  firstName   String
+  lastName    String
+  phone       String?
+  dateOfBirth DateTime?
+  address     String?
+  specialty   String?  // For doctors
+  licenseNumber String? // For healthcare providers
+  avatar      String?
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model Patient {
+  id          String   @id @default(cuid())
+  patientId   String   @unique // Custom patient ID like MR0001
+  email       String   @unique
+  phone       String?
+  firstName   String
+  lastName    String
+  dateOfBirth DateTime
+  gender      Gender
+  bloodGroup  BloodGroup?
+  address     String?
+  emergencyContact EmergencyContact?
+  insurance   Insurance?
+  
+  // Medical details
+  allergies   String?
+  medications String?
+  conditions  String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  appointments Appointment[]
+  medicalRecords MedicalRecord[]
+  prescriptions Prescription[]
+  labResults  LabResult[]
+  vitalSigns  VitalSign[]
+  billing     Billing[]
+
+  @@map("patients")
+}
+
+model EmergencyContact {
+  id          String   @id @default(cuid())
+  patientId   String   @unique
+  name        String
+  relationship String
+  phone       String
+  address     String?
+  
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("emergency_contacts")
+}
+
+model Insurance {
+  id          String   @id @default(cuid())
+  patientId   String   @unique
+  provider    String
+  policyNumber String
+  groupNumber String?
+  effectiveDate DateTime
+  expirationDate DateTime?
+  copay       Float?
+  deductible  Float?
+  
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("insurance")
+}
+
+model Appointment {
+  id          String   @id @default(cuid())
+  patientId   String
+  doctorId    String
+  appointmentDate DateTime
+  duration    Int      @default(30) // in minutes
+  status      AppointmentStatus @default(Scheduled)
+  type        AppointmentType @default(Consultation)
+  reason      String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  doctor      User     @relation(fields: [doctorId], references: [id])
+  medicalRecord MedicalRecord?
+
+  @@map("appointments")
+}
+
+model MedicalRecord {
+  id          String   @id @default(cuid())
+  patientId   String
+  doctorId    String
+  appointmentId String? @unique
+  diagnosis   String
+  symptoms    String?
+  treatment   String?
+  notes       String?
+  height      Float?   // in cm
+  weight      Float?   // in kg
+  temperature Float?   // in Celsius
+  bloodPressureSystolic Int?
+  bloodPressureDiastolic Int?
+  heartRate   Int?
+  respiratoryRate Int?
+  visitDate   DateTime @default(now())
+  followUpDate DateTime?
+
+  // Relations
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  doctor      User     @relation(fields: [doctorId], references: [id])
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+  prescriptions Prescription[]
+
+  @@map("medical_records")
+}
+
+model Prescription {
+  id          String   @id @default(cuid())
+  patientId   String
+  doctorId    String
+  medicalRecordId String?
+  medication  String
+  dosage      String
+  frequency   String
+  duration    String
+  instructions String?
+  startDate   DateTime
+  endDate     DateTime?
+  status      PrescriptionStatus @default(Active)
+  refills     Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  // Relations
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  doctor      User     @relation(fields: [doctorId], references: [id])
+  medicalRecord MedicalRecord? @relation(fields: [medicalRecordId], references: [id])
+
+  @@map("prescriptions")
+}
+
+model LabResult {
+  id          String   @id @default(cuid())
+  patientId   String
+  doctorId    String
+  testName    String
+  testType    LabTestType
+  result      String
+  normalRange String?
+  units       String?
+  notes       String?
+  performedAt DateTime?
+  reportedAt  DateTime @default(now())
+  status      LabResultStatus @default(Pending)
+  attachment  String? // File URL for lab reports
+
+  // Relations
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  doctor      User     @relation(fields: [doctorId], references: [id])
+
+  @@map("lab_results")
+}
+
+model VitalSign {
+  id          String   @id @default(cuid())
+  patientId   String
+  recordedBy  String
+  bloodPressureSystolic Int?
+  bloodPressureDiastolic Int?
+  heartRate   Int?
+  temperature Float?
+  respiratoryRate Int?
+  oxygenSaturation Float?
+  weight      Float?
+  height      Float?
+  bmi         Float?
+  notes       String?
+  recordedAt  DateTime @default(now())
+
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  user        User     @relation(fields: [recordedBy], references: [id])
+
+  @@map("vital_signs")
+}
+
+model Billing {
+  id          String   @id @default(cuid())
+  patientId   String
+  doctorId    String
+  appointmentId String?
+  amount      Float
+  status      BillingStatus @default(Pending)
+  serviceDate DateTime
+  dueDate     DateTime
+  paidDate    DateTime?
+  paymentMethod String?
+  insuranceClaimId String?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  doctor      User     @relation(fields: [doctorId], references: [id])
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+
+  @@map("billing")
+}
+
+
+model TokenBlacklist {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("token_blacklist")
+}
+
+
+
+model AccessRequest {
+  id          String   @id @default(cuid())
+  patientId   String
+  providerId  String   // The provider requesting access
+  requestType AccessRequestType
+  status      AccessRequestStatus @default(Pending)
+  reason      String   // Why access is needed
+  requestedRecords RecordType[] // Specific records requested
+  durationHours Int    // How long access should last (e.g., 24, 72, 168 hours)
+  expiresAt   DateTime? // Calculated based on durationHours
+  accessToken String? @unique // Token for secure access grant
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  patient     Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  provider    User    @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  accessGrants AccessGrant[]
+
+  @@map("access_requests")
+}
+
+model AccessGrant {
+  id          String   @id @default(cuid())
+  accessRequestId String?
+  patientId   String
+  providerId  String
+  grantedBy   String   // Patient ID or authorized user
+  grantedAt   DateTime @default(now())
+  expiresAt   DateTime
+  status      AccessGrantStatus @default(Active)
+  permissions AccessPermission[]
+  accessToken String? @unique
+  lastAccessedAt DateTime?
+  accessCount Int @default(0)
+
+  // Relations
+  patient     Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  provider    User    @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  accessRequest AccessRequest? @relation(fields: [accessRequestId], references: [id])
+
+  @@map("access_grants")
+}
+
+model AccessLog {
+  id          String   @id @default(cuid())
+  accessGrantId String
+  action      String   // VIEW, CREATE, UPDATE, etc.
+  resource    String   // Patient, MedicalRecord, etc.
+  resourceId  String?
+  accessedAt  DateTime @default(now())
+  ipAddress   String?
+  userAgent   String?
+
+  // Relations
+  accessGrant AccessGrant @relation(fields: [accessGrantId], references: [id], onDelete: Cascade)
+
+  @@map("access_logs")
+}
+
+
+
+
+// Enums
+enum UserRole {
+  Admin
+  Doctor
+  Nurse
+  Receptionist
+  Patient
+}
+
+enum UserStatus {
+  Active
+  Inactive
+  Locked
+  Suspended
+}
+
+enum Gender {
+  Male
+  Female
+  Other
+  Unknown
+}
+
+enum BloodGroup {
+  A_Positive
+  A_Negative
+  B_Positive
+  B_Negative
+  AB_Positive
+  AB_Negative
+  O_Positive
+  O_Negative
+}
+
+enum AppointmentStatus {
+  Scheduled
+  Confirmed
+  InProgress
+  Completed
+  Cancelled
+  NoShow
+}
+
+enum AppointmentType {
+  Consultation
+  FollowUp
+  Emergency
+  RoutineCheckup
+  Surgery
+  Therapy
+}
+
+enum PrescriptionStatus {
+  Active
+  Completed
+  Cancelled
+  Expired
+}
+
+enum LabTestType {
+  BloodTest
+  UrineTest
+  Imaging
+  Biopsy
+  Culture
+  Genetic
+  Other
+}
+
+enum LabResultStatus {
+  Pending
+  Completed
+  Abnormal
+  Critical
+  Cancelled
+}
+
+enum BillingStatus {
+  Pending
+  Paid
+  PartiallyPaid
+  InsurancePending
+  WrittenOff
+}
+
+
+enum AccessRequestType {
+  CONSULTATION
+  EMERGENCY
+  SECOND_OPINION
+  CONTINUITY_OF_CARE
+  RESEARCH
+  OTHER
+}
+
+enum AccessRequestStatus {
+  PENDING
+  APPROVED
+  DENIED
+  EXPIRED
+  CANCELLED
+}
+
+enum AccessGrantStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  SUSPENDED
+}
+
+enum RecordType {
+  DEMOGRAPHICS
+  MEDICAL_HISTORY
+  LAB_RESULTS
+  PRESCRIPTIONS
+  APPOINTMENTS
+  ALLERGIES
+  IMMUNIZATIONS
+  VITAL_SIGNS
+  BILLING
+  ALL_RECORDS
+}
+
+enum AccessPermission {
+  VIEW_RECORDS
+  VIEW_LAB_RESULTS
+  VIEW_PRESCRIPTIONS
+  CREATE_NOTES
+  REQUEST_LABS
+  PRESCRIBE_MEDICATIONS
+  SCHEDULE_APPOINTMENTS
+  FULL_ACCESS
+}
