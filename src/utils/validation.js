@@ -1,21 +1,30 @@
-// src/utils/validation.js
+// src/middleware/validation.js
 const Joi = require('joi');
 
+// Auth validations
 const authValidation = {
   register: Joi.object({
     email: Joi.string().email().required(),
-    password: Joi.string().min(6).required(),
-    firstName: Joi.string().required(),
-    lastName: Joi.string().required(),
-    role: Joi.string().valid('Admin', 'Doctor', 'Nurse', 'Receptionist').required(),
-    phone: Joi.string().optional(),
-    specialty: Joi.string().when('role', {
-      is: 'Doctor',
+    password: Joi.string().min(8).required(),
+    firstName: Joi.string().min(2).max(50).required(),
+    lastName: Joi.string().min(2).max(50).required(),
+    role: Joi.string().valid('PATIENT', 'DOCTOR', 'NURSE', 'ADMIN', 'LAB_TECH', 'PHARMACIST').required(),
+    phone: Joi.string().pattern(/^\+?[\d\s-()]+$/).optional(),
+    dateOfBirth: Joi.date().max('now').optional(),
+    address: Joi.string().max(200).optional(),
+    // Staff-specific fields
+    department: Joi.string().when('role', {
+      is: Joi.valid('DOCTOR', 'NURSE', 'ADMIN', 'LAB_TECH', 'PHARMACIST'),
+      then: Joi.required(),
+      otherwise: Joi.optional()
+    }),
+    specialization: Joi.string().when('role', {
+      is: 'DOCTOR',
       then: Joi.required(),
       otherwise: Joi.optional()
     }),
     licenseNumber: Joi.string().when('role', {
-      is: 'Doctor',
+      is: 'DOCTOR',
       then: Joi.required(),
       otherwise: Joi.optional()
     })
@@ -27,22 +36,23 @@ const authValidation = {
   })
 };
 
+// Patient validations
 const patientValidation = {
   create: Joi.object({
-    email: Joi.string().email().required(),
-    phone: Joi.string().required(),
-    firstName: Joi.string().required(),
-    lastName: Joi.string().required(),
-    dateOfBirth: Joi.date().required(),
-    gender: Joi.string().valid('Male', 'Female', 'Other', 'Unknown').required(),
-    bloodGroup: Joi.string().valid(
-      'A_Positive', 'A_Negative', 'B_Positive', 'B_Negative',
-      'AB_Positive', 'AB_Negative', 'O_Positive', 'O_Negative'
+    firstName: Joi.string().min(2).max(50).required(),
+    lastName: Joi.string().min(2).max(50).required(),
+    dateOfBirth: Joi.date().max('now').required(),
+    gender: Joi.string().valid('MALE', 'FEMALE', 'OTHER', 'UNKNOWN').required(),
+    phone: Joi.string().pattern(/^\+?[\d\s-()]+$/).optional(),
+    email: Joi.string().email().optional(),
+    address: Joi.string().max(200).optional(),
+    bloodType: Joi.string().valid(
+      'A_POSITIVE', 'A_NEGATIVE', 'B_POSITIVE', 'B_NEGATIVE',
+      'AB_POSITIVE', 'AB_NEGATIVE', 'O_POSITIVE', 'O_NEGATIVE'
     ).optional(),
-    address: Joi.string().optional(),
-    allergies: Joi.string().optional(),
-    medications: Joi.string().optional(),
-    conditions: Joi.string().optional(),
+    allergies: Joi.string().max(500).optional(),
+    medications: Joi.string().max(500).optional(),
+    conditions: Joi.string().max(500).optional(),
     emergencyContact: Joi.object({
       name: Joi.string().required(),
       relationship: Joi.string().required(),
@@ -55,121 +65,82 @@ const patientValidation = {
       groupNumber: Joi.string().optional(),
       effectiveDate: Joi.date().required(),
       expirationDate: Joi.date().optional(),
-      copay: Joi.number().optional(),
-      deductible: Joi.number().optional()
+      copay: Joi.number().min(0).optional(),
+      deductible: Joi.number().min(0).optional()
     }).optional()
   }),
 
   update: Joi.object({
-    phone: Joi.string().optional(),
-    address: Joi.string().optional(),
-    allergies: Joi.string().optional(),
-    medications: Joi.string().optional(),
-    conditions: Joi.string().optional()
+    phone: Joi.string().pattern(/^\+?[\d\s-()]+$/).optional(),
+    address: Joi.string().max(200).optional(),
+    allergies: Joi.string().max(500).optional(),
+    medications: Joi.string().max(500).optional(),
+    conditions: Joi.string().max(500).optional()
   })
 };
 
-const appointmentValidation = {
-  create: Joi.object({
-    patientId: Joi.string().required(),
-    doctorId: Joi.string().required(),
-    appointmentDate: Joi.date().required(),
-    duration: Joi.number().default(30),
-    type: Joi.string().valid(
-      'Consultation', 'FollowUp', 'Emergency', 'RoutineCheckup', 'Surgery', 'Therapy'
-    ).default('Consultation'),
-    reason: Joi.string().required()
-  }),
-
-  update: Joi.object({
-    status: Joi.string().valid(
-      'Scheduled', 'Confirmed', 'InProgress', 'Completed', 'Cancelled', 'NoShow'
-    ).optional(),
-    notes: Joi.string().optional()
-  })
-};
-
-
-
-
+// Medical record validations
 const medicalRecordValidation = {
   create: Joi.object({
     patientId: Joi.string().required(),
-    doctorId: Joi.string().required(),
-    appointmentId: Joi.string().optional(),
-    diagnosis: Joi.string().required(),
-    symptoms: Joi.string().optional(),
-    treatment: Joi.string().optional(),
-    notes: Joi.string().optional(),
-    height: Joi.number().optional(),
-    weight: Joi.number().optional(),
-    temperature: Joi.number().optional(),
-    bloodPressureSystolic: Joi.number().integer().optional(),
-    bloodPressureDiastolic: Joi.number().integer().optional(),
-    heartRate: Joi.number().integer().optional(),
-    respiratoryRate: Joi.number().integer().optional(),
-    followUpDate: Joi.date().optional()
+    chiefComplaint: Joi.string().required(),
+    historyOfPresentIllness: Joi.string().optional(),
+    pastMedicalHistory: Joi.string().optional(),
+    medications: Joi.string().optional(),
+    allergies: Joi.string().optional(),
+    socialHistory: Joi.string().optional(),
+    familyHistory: Joi.string().optional(),
+    examination: Joi.string().optional(),
+    assessment: Joi.string().required(),
+    plan: Joi.string().required(),
+    height: Joi.number().min(0).max(300).optional(),
+    weight: Joi.number().min(0).max(500).optional(),
+    temperature: Joi.number().min(30).max(45).optional(),
+    bloodPressure: Joi.string().pattern(/^\d{2,3}\/\d{2,3}$/).optional(),
+    heartRate: Joi.number().integer().min(30).max(200).optional(),
+    respiratoryRate: Joi.number().integer().min(8).max(60).optional(),
+    oxygenSaturation: Joi.number().min(0).max(100).optional(),
+    followUpDate: Joi.date().min('now').optional()
   })
 };
 
+// Appointment validations
+const appointmentValidation = {
+  create: Joi.object({
+    patientId: Joi.string().required(),
+    appointmentDate: Joi.date().min('now').required(),
+    duration: Joi.number().integer().min(15).max(240).default(30),
+    type: Joi.string().valid(
+      'CONSULTATION', 'FOLLOW_UP', 'EMERGENCY', 'ROUTINE_CHECKUP', 'SURGERY', 'THERAPY', 'LAB_TEST'
+    ).default('CONSULTATION'),
+    reason: Joi.string().max(500).required(),
+    notes: Joi.string().max(1000).optional()
+  })
+};
+
+// Prescription validations
 const prescriptionValidation = {
   create: Joi.object({
     patientId: Joi.string().required(),
-    doctorId: Joi.string().required(),
     medicalRecordId: Joi.string().optional(),
     medication: Joi.string().required(),
     dosage: Joi.string().required(),
     frequency: Joi.string().required(),
     duration: Joi.string().required(),
-    instructions: Joi.string().optional(),
-    startDate: Joi.date().required(),
-    endDate: Joi.date().optional(),
-    refills: Joi.number().integer().min(0).default(0)
-  })
-};
-
-const labResultValidation = {
-  create: Joi.object({
-    patientId: Joi.string().required(),
-    doctorId: Joi.string().required(),
-    testName: Joi.string().required(),
-    testType: Joi.string().valid(
-      'BloodTest', 'UrineTest', 'Imaging', 'Biopsy', 'Culture', 'Genetic', 'Other'
+    route: Joi.string().valid(
+      'ORAL', 'TOPICAL', 'INTRAVENOUS', 'INTRAMUSCULAR', 'SUBCUTANEOUS', 'INHALATION', 'RECTAL'
     ).required(),
-    result: Joi.string().required(),
-    normalRange: Joi.string().optional(),
-    units: Joi.string().optional(),
-    notes: Joi.string().optional(),
-    performedAt: Joi.date().optional(),
-    status: Joi.string().valid(
-      'Pending', 'Completed', 'Abnormal', 'Critical', 'Cancelled'
-    ).default('Pending'),
-    attachment: Joi.string().optional()
+    instructions: Joi.string().max(500).optional(),
+    startDate: Joi.date().min('now').required(),
+    endDate: Joi.date().min(Joi.ref('startDate')).optional(),
+    refills: Joi.number().integer().min(0).max(12).default(0)
   })
 };
-
-const billingValidation = {
-  create: Joi.object({
-    patientId: Joi.string().required(),
-    doctorId: Joi.string().required(),
-    appointmentId: Joi.string().optional(),
-    amount: Joi.number().positive().required(),
-    serviceDate: Joi.date().required(),
-    dueDate: Joi.date().optional(),
-    notes: Joi.string().optional(),
-    insuranceClaimId: Joi.string().optional()
-  })
-};
-
-
-
 
 module.exports = {
   authValidation,
   patientValidation,
-  appointmentValidation,
   medicalRecordValidation,
-  prescriptionValidation,
-  labResultValidation,
-  billingValidation
+  appointmentValidation,
+  prescriptionValidation
 };

@@ -3,6 +3,7 @@ const prisma = require('../config/database');
 const { successResponse, errorResponse } = require('../utils/utils');
 
 const labResultController = {
+  
   getAllLabResults: async (req, res, next) => {
     try {
       const {

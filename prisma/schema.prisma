@@ -1,11 +1,10 @@
-// prisma/schema.prisma
-
+// schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite" // or "postgresql" for production
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -15,22 +14,28 @@ model User {
   password    String
   role        UserRole
   profile     UserProfile?
+  staff       Staff?
+  patient     Patient?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  status    UserStatus @default(Active)
-  lastLogin DateTime?
-  loginAttempts Int @default(0)
+  // Audit fields
+  lastLogin   DateTime?
+  loginAttempts Int    @default(0)
   lockedUntil DateTime?
+  status      UserStatus @default(ACTIVE)
 
-  // Relations
-  patients    Patient[]
+  // Relations - ADDED MISSING OPPOSITE RELATIONS
+  createdPatients Patient[] @relation("PatientCreator")
   appointments Appointment[]
   medicalRecords MedicalRecord[]
   prescriptions Prescription[]
   labResults  LabResult[]
   billing     Billing[]
-
+  accessLogs  AccessLog[]
+  auditLogs   AuditLog[]    // ADDED: Opposite relation for AuditLog
+  recordedVitalSigns VitalSign[]  // ADDED: Opposite relation for VitalSign
+  
   @@map("users")
 }
 
@@ -42,8 +47,6 @@ model UserProfile {
   phone       String?
   dateOfBirth DateTime?
   address     String?
-  specialty   String?  // For doctors
-  licenseNumber String? // For healthcare providers
   avatar      String?
   
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -51,35 +54,59 @@ model UserProfile {
   @@map("user_profiles")
 }
 
+model Staff {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  employeeId  String   @unique
+  department  String
+  specialization String?
+  licenseNumber String?
+  hireDate    DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("staff")
+}
+
 model Patient {
   id          String   @id @default(cuid())
-  patientId   String   @unique // Custom patient ID like MR0001
-  email       String   @unique
-  phone       String?
+  mrn         String   @unique
+  // Demographic Information
   firstName   String
   lastName    String
   dateOfBirth DateTime
   gender      Gender
-  bloodGroup  BloodGroup?
+  phone       String?
+  email       String?
   address     String?
-  emergencyContact EmergencyContact?
-  insurance   Insurance?
+  bloodType   BloodType?
   
-  // Medical details
+  // Medical Background
   allergies   String?
   medications String?
   conditions  String?
   
+  // Optional link to User account
+  userId      String?  @unique
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Administrative
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  createdBy   User?    @relation("PatientCreator", fields: [createdById], references: [id])
+  createdById String?
 
-  // Relations
+  // Medical Relations - ADDED MISSING OPPOSITE RELATIONS
+  emergencyContact EmergencyContact?
+  insurance   Insurance?
   appointments Appointment[]
   medicalRecords MedicalRecord[]
   prescriptions Prescription[]
   labResults  LabResult[]
   vitalSigns  VitalSign[]
-  billing     Billing[]
+  allergiesList Allergy[]
+  diagnoses   Diagnosis[]    // ADDED: Opposite relation for Diagnosis
+  billing     Billing[]      // ADDED: Opposite relation for Billing
 
   @@map("patients")
 }
@@ -91,6 +118,7 @@ model EmergencyContact {
   relationship String
   phone       String
   address     String?
+  notes       String?
   
   patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
@@ -113,23 +141,39 @@ model Insurance {
   @@map("insurance")
 }
 
+model Allergy {
+  id          String   @id @default(cuid())
+  patientId   String
+  allergen    String
+  severity    AllergySeverity
+  reaction    String
+  onsetDate   DateTime?
+  status      AllergyStatus @default(ACTIVE)
+  notes       String?
+  
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("allergies")
+}
+
 model Appointment {
   id          String   @id @default(cuid())
   patientId   String
-  doctorId    String
+  providerId  String
   appointmentDate DateTime
-  duration    Int      @default(30) // in minutes
-  status      AppointmentStatus @default(Scheduled)
-  type        AppointmentType @default(Consultation)
+  duration    Int      @default(30)
+  status      AppointmentStatus @default(SCHEDULED)
+  type        AppointmentType @default(CONSULTATION)
   reason      String?
   notes       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // Relations
+  // Relations - ADDED MISSING OPPOSITE RELATION
   patient     Patient  @relation(fields: [patientId], references: [id])
-  doctor      User     @relation(fields: [doctorId], references: [id])
+  provider    User     @relation(fields: [providerId], references: [id])
   medicalRecord MedicalRecord?
+  billing     Billing[]  // ADDED: Opposite relation for Billing
 
   @@map("appointments")
 }
@@ -137,50 +181,91 @@ model Appointment {
 model MedicalRecord {
   id          String   @id @default(cuid())
   patientId   String
-  doctorId    String
+  providerId  String
   appointmentId String? @unique
-  diagnosis   String
-  symptoms    String?
-  treatment   String?
-  notes       String?
-  height      Float?   // in cm
-  weight      Float?   // in kg
-  temperature Float?   // in Celsius
-  bloodPressureSystolic Int?
-  bloodPressureDiastolic Int?
+  // Clinical Information
+  chiefComplaint String
+  historyOfPresentIllness String?
+  pastMedicalHistory String?
+  medications String?
+  allergies   String?
+  socialHistory String?
+  familyHistory String?
+  // Examination
+  examination String?
+  assessment  String?
+  plan        String?
+  // Vital Signs (can also be separate)
+  height      Float?
+  weight      Float?
+  temperature Float?
+  bloodPressure String?
   heartRate   Int?
   respiratoryRate Int?
+  oxygenSaturation Float?
+  
   visitDate   DateTime @default(now())
   followUpDate DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Audit fields for soft delete
+  deletedAt   DateTime?
+  deletedBy   String?
+  isDeleted   Boolean @default(false)
+  version     Int      @default(1)
+  previousVersionId String?
 
   // Relations
   patient     Patient  @relation(fields: [patientId], references: [id])
-  doctor      User     @relation(fields: [doctorId], references: [id])
+  provider    User     @relation(fields: [providerId], references: [id])
   appointment Appointment? @relation(fields: [appointmentId], references: [id])
   prescriptions Prescription[]
+  labResults  LabResult[]
+  diagnoses   Diagnosis[]
 
   @@map("medical_records")
+}
+
+model Diagnosis {
+  id          String   @id @default(cuid())
+  medicalRecordId String
+  patientId   String
+  code        String    // ICD-10 code
+  description String
+  type        DiagnosisType
+  status      DiagnosisStatus @default(ACTIVE)
+  notes       String?
+  diagnosedAt DateTime @default(now())
+  
+  // Relations
+  medicalRecord MedicalRecord @relation(fields: [medicalRecordId], references: [id])
+  patient      Patient  @relation(fields: [patientId], references: [id]) // FIXED: Now has opposite relation in Patient
+
+  @@map("diagnoses")
 }
 
 model Prescription {
   id          String   @id @default(cuid())
   patientId   String
-  doctorId    String
+  providerId  String
   medicalRecordId String?
   medication  String
   dosage      String
   frequency   String
   duration    String
+  route       MedicationRoute
   instructions String?
   startDate   DateTime
   endDate     DateTime?
-  status      PrescriptionStatus @default(Active)
+  status      PrescriptionStatus @default(ACTIVE)
   refills     Int      @default(0)
+  refillsRemaining Int @default(0)
   createdAt   DateTime @default(now())
 
   // Relations
   patient     Patient  @relation(fields: [patientId], references: [id])
-  doctor      User     @relation(fields: [doctorId], references: [id])
+  provider    User     @relation(fields: [providerId], references: [id])
   medicalRecord MedicalRecord? @relation(fields: [medicalRecordId], references: [id])
 
   @@map("prescriptions")
@@ -189,7 +274,8 @@ model Prescription {
 model LabResult {
   id          String   @id @default(cuid())
   patientId   String
-  doctorId    String
+  providerId  String
+  medicalRecordId String?
   testName    String
   testType    LabTestType
   result      String
@@ -198,12 +284,13 @@ model LabResult {
   notes       String?
   performedAt DateTime?
   reportedAt  DateTime @default(now())
-  status      LabResultStatus @default(Pending)
-  attachment  String? // File URL for lab reports
-
+  status      LabResultStatus @default(PENDING)
+  attachment  String?
+  
   // Relations
   patient     Patient  @relation(fields: [patientId], references: [id])
-  doctor      User     @relation(fields: [doctorId], references: [id])
+  provider    User     @relation(fields: [providerId], references: [id])
+  medicalRecord MedicalRecord? @relation(fields: [medicalRecordId], references: [id])
 
   @@map("lab_results")
 }
@@ -224,8 +311,9 @@ model VitalSign {
   notes       String?
   recordedAt  DateTime @default(now())
 
+  // Relations
   patient     Patient  @relation(fields: [patientId], references: [id])
-  user        User     @relation(fields: [recordedBy], references: [id])
+  user        User     @relation(fields: [recordedBy], references: [id]) // FIXED: Now has opposite relation in User
 
   @@map("vital_signs")
 }
@@ -233,10 +321,10 @@ model VitalSign {
 model Billing {
   id          String   @id @default(cuid())
   patientId   String
-  doctorId    String
+  providerId  String
   appointmentId String?
   amount      Float
-  status      BillingStatus @default(Pending)
+  status      BillingStatus @default(PENDING)
   serviceDate DateTime
   dueDate     DateTime
   paidDate    DateTime?
@@ -246,218 +334,165 @@ model Billing {
   createdAt   DateTime @default(now())
 
   // Relations
-  patient     Patient  @relation(fields: [patientId], references: [id])
-  doctor      User     @relation(fields: [doctorId], references: [id])
-  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+  patient     Patient  @relation(fields: [patientId], references: [id]) // FIXED: Now has opposite relation in Patient
+  provider    User     @relation(fields: [providerId], references: [id])
+  appointment Appointment? @relation(fields: [appointmentId], references: [id]) // FIXED: Now has opposite relation in Appointment
 
   @@map("billing")
 }
 
-
-model TokenBlacklist {
-  id        String   @id @default(cuid())
-  token     String   @unique
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  @@map("token_blacklist")
-}
-
-
-
-model AccessRequest {
-  id          String   @id @default(cuid())
-  patientId   String
-  providerId  String   // The provider requesting access
-  requestType AccessRequestType
-  status      AccessRequestStatus @default(Pending)
-  reason      String   // Why access is needed
-  requestedRecords RecordType[] // Specific records requested
-  durationHours Int    // How long access should last (e.g., 24, 72, 168 hours)
-  expiresAt   DateTime? // Calculated based on durationHours
-  accessToken String? @unique // Token for secure access grant
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  patient     Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  provider    User    @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  accessGrants AccessGrant[]
-
-  @@map("access_requests")
-}
-
-model AccessGrant {
-  id          String   @id @default(cuid())
-  accessRequestId String?
-  patientId   String
-  providerId  String
-  grantedBy   String   // Patient ID or authorized user
-  grantedAt   DateTime @default(now())
-  expiresAt   DateTime
-  status      AccessGrantStatus @default(Active)
-  permissions AccessPermission[]
-  accessToken String? @unique
-  lastAccessedAt DateTime?
-  accessCount Int @default(0)
-
-  // Relations
-  patient     Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  provider    User    @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  accessRequest AccessRequest? @relation(fields: [accessRequestId], references: [id])
-
-  @@map("access_grants")
-}
-
 model AccessLog {
   id          String   @id @default(cuid())
-  accessGrantId String
-  action      String   // VIEW, CREATE, UPDATE, etc.
-  resource    String   // Patient, MedicalRecord, etc.
+  userId      String
+  action      String   // VIEW, CREATE, UPDATE, DELETE
+  resource    String   // PATIENT, MEDICAL_RECORD, etc.
   resourceId  String?
-  accessedAt  DateTime @default(now())
   ipAddress   String?
   userAgent   String?
+  accessedAt  DateTime @default(now())
 
-  // Relations
-  accessGrant AccessGrant @relation(fields: [accessGrantId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id])
 
   @@map("access_logs")
 }
 
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String
+  action      String
+  tableName   String
+  recordId    String
+  oldValues   Json?
+  newValues   Json?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
 
+  user        User     @relation(fields: [userId], references: [id]) // FIXED: Now has opposite relation in User
 
+  @@map("audit_logs")
+}
 
-// Enums
+// Enums (keep your existing enums)
 enum UserRole {
-  Admin
-  Doctor
-  Nurse
-  Receptionist
-  Patient
+  ADMIN
+  DOCTOR
+  NURSE
+  RECEPTIONIST
+  LAB_TECH
+  PHARMACIST
+  PATIENT
 }
 
 enum UserStatus {
-  Active
-  Inactive
-  Locked
-  Suspended
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  LOCKED
 }
 
 enum Gender {
-  Male
-  Female
-  Other
-  Unknown
+  MALE
+  FEMALE
+  OTHER
+  UNKNOWN
 }
 
-enum BloodGroup {
-  A_Positive
-  A_Negative
-  B_Positive
-  B_Negative
-  AB_Positive
-  AB_Negative
-  O_Positive
-  O_Negative
+enum BloodType {
+  A_POSITIVE
+  A_NEGATIVE
+  B_POSITIVE
+  B_NEGATIVE
+  AB_POSITIVE
+  AB_NEGATIVE
+  O_POSITIVE
+  O_NEGATIVE
 }
 
 enum AppointmentStatus {
-  Scheduled
-  Confirmed
-  InProgress
-  Completed
-  Cancelled
-  NoShow
+  SCHEDULED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
 }
 
 enum AppointmentType {
-  Consultation
-  FollowUp
-  Emergency
-  RoutineCheckup
-  Surgery
-  Therapy
+  CONSULTATION
+  FOLLOW_UP
+  EMERGENCY
+  ROUTINE_CHECKUP
+  SURGERY
+  THERAPY
+  LAB_TEST
+}
+
+enum DiagnosisType {
+  PRIMARY
+  SECONDARY
+  CHRONIC
+  ACUTE
+}
+
+enum DiagnosisStatus {
+  ACTIVE
+  RESOLVED
+  CHRONIC
+  RULED_OUT
+}
+
+enum MedicationRoute {
+  ORAL
+  TOPICAL
+  INTRAVENOUS
+  INTRAMUSCULAR
+  SUBCUTANEOUS
+  INHALATION
+  RECTAL
 }
 
 enum PrescriptionStatus {
-  Active
-  Completed
-  Cancelled
-  Expired
+  ACTIVE
+  COMPLETED
+  DISCONTINUED
+  EXPIRED
 }
 
 enum LabTestType {
-  BloodTest
-  UrineTest
-  Imaging
-  Biopsy
-  Culture
-  Genetic
-  Other
-}
-
-enum LabResultStatus {
-  Pending
-  Completed
-  Abnormal
-  Critical
-  Cancelled
-}
-
-enum BillingStatus {
-  Pending
-  Paid
-  PartiallyPaid
-  InsurancePending
-  WrittenOff
-}
-
-
-enum AccessRequestType {
-  CONSULTATION
-  EMERGENCY
-  SECOND_OPINION
-  CONTINUITY_OF_CARE
-  RESEARCH
+  BLOOD_TEST
+  URINE_TEST
+  IMAGING
+  BIOPSY
+  CULTURE
+  GENETIC
   OTHER
 }
 
-enum AccessRequestStatus {
+enum LabResultStatus {
   PENDING
-  APPROVED
-  DENIED
-  EXPIRED
+  COMPLETED
+  ABNORMAL
+  CRITICAL
   CANCELLED
 }
 
-enum AccessGrantStatus {
+enum BillingStatus {
+  PENDING
+  PAID
+  PARTIALLY_PAID
+  INSURANCE_PENDING
+  WRITTEN_OFF
+}
+
+enum AllergySeverity {
+  MILD
+  MODERATE
+  SEVERE
+  LIFE_THREATENING
+}
+
+enum AllergyStatus {
   ACTIVE
-  EXPIRED
-  REVOKED
-  SUSPENDED
-}
-
-enum RecordType {
-  DEMOGRAPHICS
-  MEDICAL_HISTORY
-  LAB_RESULTS
-  PRESCRIPTIONS
-  APPOINTMENTS
-  ALLERGIES
-  IMMUNIZATIONS
-  VITAL_SIGNS
-  BILLING
-  ALL_RECORDS
-}
-
-enum AccessPermission {
-  VIEW_RECORDS
-  VIEW_LAB_RESULTS
-  VIEW_PRESCRIPTIONS
-  CREATE_NOTES
-  REQUEST_LABS
-  PRESCRIBE_MEDICATIONS
-  SCHEDULE_APPOINTMENTS
-  FULL_ACCESS
+  RESOLVED
+  UNCONFIRMED
 }

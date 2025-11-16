@@ -1,16 +1,13 @@
+// src/routes/medicalRecords.js
 const express = require('express');
-const { medicalRecordController } = require('../controllers/medicalRecordController');
-const { auth, authorize } = require('../middleware/auth');
-
 const router = express.Router();
+const medicalRecordsController = require('../controllers/medicalRecordController');
+const { auth, authorize, canAccessPatient } = require('../middleware/auth');
 
 router.use(auth);
 
-router.get('/', medicalRecordController.getAllMedicalRecords);
-router.get('/patient/:patientId', medicalRecordController.getPatientMedicalRecords);
-router.get('/:id', medicalRecordController.getMedicalRecord);
-router.post('/', authorize('Admin', 'Doctor'), medicalRecordController.createMedicalRecord);
-router.put('/:id', authorize('Admin', 'Doctor'), medicalRecordController.updateMedicalRecord);
-router.delete('/:id', authorize('Admin', 'Doctor'), medicalRecordController.deleteMedicalRecord);
+// Medical records (healthcare providers only)
+router.post('/', authorize('DOCTOR', 'NURSE'), medicalRecordsController.createMedicalRecord);
+router.get('/patient/:patientId', canAccessPatient, medicalRecordsController.getPatientMedicalRecords);
 
 module.exports = router;

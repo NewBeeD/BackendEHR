@@ -1,321 +1,158 @@
-// // src/controllers/patientController.js
-// const prisma = require('../config/database');
-// const { patientValidation } = require('../utils/validation');
-// const { generatePatientId, successResponse, errorResponse } = require('../utils/utils');
-
-// const patientController = {
-//   getAllPatients: async (req, res, next) => {
-//     try {
-//       const {
-//         page = 1,
-//         limit = 10,
-//         search = '',
-//         sortBy = 'createdAt',
-//         sortOrder = 'desc'
-//       } = req.query;
-
-//       const skip = (page - 1) * limit;
-
-//       // Build search condition
-//       const searchCondition = search ? {
-//         OR: [
-//           { firstName: { contains: search, mode: 'insensitive' } },
-//           { lastName: { contains: search, mode: 'insensitive' } },
-//           { email: { contains: search, mode: 'insensitive' } },
-//           { patientId: { contains: search, mode: 'insensitive' } }
-//         ]
-//       } : {};
-
-//       const [patients, total] = await Promise.all([
-//         prisma.patient.findMany({
-//           where: searchCondition,
-//           include: {
-//             emergencyContact: true,
-//             insurance: true,
-//             _count: {
-//               select: {
-//                 appointments: true,
-//                 medicalRecords: true
-//               }
-//             }
-//           },
-//           orderBy: { [sortBy]: sortOrder },
-//           skip: parseInt(skip),
-//           take: parseInt(limit)
-//         }),
-//         prisma.patient.count({ where: searchCondition })
-//       ]);
-
-//       res.json(successResponse({
-//         patients,
-//         pagination: {
-//           page: parseInt(page),
-//           limit: parseInt(limit),
-//           total,
-//           pages: Math.ceil(total / limit)
-//         }
-//       }));
-
-//     } catch (error) {
-//       next(error);
-//     }
-//   },
-
-//   getPatient: async (req, res, next) => {
-//     try {
-//       const { id } = req.params;
-
-//       const patient = await prisma.patient.findUnique({
-//         where: { id },
-//         include: {
-//           emergencyContact: true,
-//           insurance: true,
-//           appointments: {
-//             include: {
-//               doctor: {
-//                 include: { profile: true }
-//               }
-//             },
-//             orderBy: { appointmentDate: 'desc' }
-//           },
-//           medicalRecords: {
-//             include: {
-//               doctor: {
-//                 include: { profile: true }
-//               }
-//             },
-//             orderBy: { visitDate: 'desc' }
-//           },
-//           prescriptions: {
-//             include: {
-//               doctor: {
-//                 include: { profile: true }
-//               }
-//             },
-//             orderBy: { createdAt: 'desc' }
-//           },
-//           labResults: {
-//             include: {
-//               doctor: {
-//                 include: { profile: true }
-//               }
-//             },
-//             orderBy: { reportedAt: 'desc' }
-//           },
-//           vitalSigns: {
-//             orderBy: { recordedAt: 'desc' },
-//             take: 10
-//           }
-//         }
-//       });
-
-//       if (!patient) {
-//         return res.status(404).json(errorResponse('Patient not found'));
-//       }
-
-//       res.json(successResponse({ patient }));
-
-//     } catch (error) {
-//       next(error);
-//     }
-//   },
-
-//   createPatient: async (req, res, next) => {
-//     try {
-//       const { error, value } = patientValidation.create.validate(req.body);
-//       if (error) {
-//         return res.status(400).json(errorResponse(error.details[0].message));
-//       }
-
-//       const patientId = await generatePatientId(prisma);
-
-//       const patient = await prisma.patient.create({
-//         data: {
-//           patientId,
-//           ...value,
-//           emergencyContact: value.emergencyContact ? {
-//             create: value.emergencyContact
-//           } : undefined,
-//           insurance: value.insurance ? {
-//             create: value.insurance
-//           } : undefined
-//         },
-//         include: {
-//           emergencyContact: true,
-//           insurance: true
-//         }
-//       });
-
-//       res.status(201).json(successResponse({ patient }, 'Patient created successfully'));
-
-//     } catch (error) {
-//       next(error);
-//     }
-//   },
-
-//   updatePatient: async (req, res, next) => {
-//     try {
-//       const { id } = req.params;
-//       const { error, value } = patientValidation.update.validate(req.body);
-//       if (error) {
-//         return res.status(400).json(errorResponse(error.details[0].message));
-//       }
-
-//       const patient = await prisma.patient.findUnique({ where: { id } });
-//       if (!patient) {
-//         return res.status(404).json(errorResponse('Patient not found'));
-//       }
-
-//       const updatedPatient = await prisma.patient.update({
-//         where: { id },
-//         data: value,
-//         include: {
-//           emergencyContact: true,
-//           insurance: true
-//         }
-//       });
-
-//       res.json(successResponse({ patient: updatedPatient }, 'Patient updated successfully'));
-
-//     } catch (error) {
-//       next(error);
-//     }
-//   },
-
-//   deletePatient: async (req, res, next) => {
-//     try {
-//       const { id } = req.params;
-
-//       const patient = await prisma.patient.findUnique({ where: { id } });
-//       if (!patient) {
-//         return res.status(404).json(errorResponse('Patient not found'));
-//       }
-
-//       await prisma.patient.delete({ where: { id } });
-
-//       res.json(successResponse(null, 'Patient deleted successfully'));
-
-//     } catch (error) {
-//       next(error);
-//     }
-//   },
-
-//   getMedicalHistory: async (req, res, next) => {
-//     try {
-//       const { id } = req.params;
-
-//       const medicalHistory = await prisma.medicalRecord.findMany({
-//         where: { patientId: id },
-//         include: {
-//           doctor: {
-//             include: { profile: true }
-//           },
-//           prescriptions: true
-//         },
-//         orderBy: { visitDate: 'desc' }
-//       });
-
-//       res.json(successResponse({ medicalHistory }));
-
-//     } catch (error) {
-//       next(error);
-//     }
-//   },
-
-//   getPatientAppointments: async (req, res, next) => {
-//     try {
-//       const { id } = req.params;
-
-//       const appointments = await prisma.appointment.findMany({
-//         where: { patientId: id },
-//         include: {
-//           doctor: {
-//             include: { profile: true }
-//           }
-//         },
-//         orderBy: { appointmentDate: 'desc' }
-//       });
-
-//       res.json(successResponse({ appointments }));
-
-//     } catch (error) {
-//       next(error);
-//     }
-//   }
-// };
-
-// module.exports = { patientController };
-
-
-
-
-
-// src/controllers/patientController.js - HIPAA Enhanced
+// src/controllers/patientsController.js
 const prisma = require('../config/database');
+const { successResponse, errorResponse } = require('../utils/utils');
+const { generateMRN } = require('../utils/idGenerators');
 const { patientValidation } = require('../utils/validation');
-const { generatePatientId, successResponse, errorResponse } = require('../utils/utils');
-const auditService = require('../services/auditService');
-const { encrypt, decrypt } = require('../config/security');
 
-const patientController = {
-  getAllPatients: async (req, res, next) => {
+const patientsController = {
+  createPatient: async (req, res) => {
     try {
-      // Log the access
-      await auditService.log('SEARCH', 'Patient', {
-        userId: req.user.id,
-        userEmail: req.user.email,
-        userRole: req.user.role,
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent'),
-        description: `Searched patients with query: ${req.query.search || 'none'}`,
-        severity: 'Info'
-      });
+      const { error, value } = patientValidation.create.validate(req.body);
+      if (error) {
+        return res.status(400).json(errorResponse(
+          'Validation failed',
+          400,
+          error.details.map(detail => detail.message)
+        ));
+      }
 
       const {
-        page = 1,
-        limit = 10,
-        search = '',
-        sortBy = 'createdAt',
-        sortOrder = 'desc'
-      } = req.query;
+        firstName,
+        lastName,
+        dateOfBirth,
+        gender,
+        phone,
+        email,
+        address,
+        bloodType,
+        allergies,
+        medications,
+        conditions,
+        emergencyContact,
+        insurance
+      } = value;
 
-      const skip = (page - 1) * limit;
+      // Check for existing patient by email if provided
+      if (email) {
+        const existingPatient = await prisma.patient.findUnique({
+          where: { email }
+        });
 
-      const searchCondition = search ? {
-        OR: [
-          { firstName: { contains: search, mode: 'insensitive' } },
-          { lastName: { contains: search, mode: 'insensitive' } },
-          { patientId: { contains: search, mode: 'insensitive' } }
-          // Note: We don't search by email/phone for privacy
-        ]
-      } : {};
+        if (existingPatient) {
+          return res.status(409).json(errorResponse('Patient already exists with this email.', 409));
+        }
+      }
 
-      const [patients, total] = await Promise.all([
-        prisma.patient.findMany({
-          where: searchCondition,
-          select: {
-            // Only return non-sensitive fields for list view
-            id: true,
-            patientId: true,
-            firstName: true,
-            lastName: true,
-            dateOfBirth: true,
-            gender: true,
-            bloodGroup: true,
-            createdAt: true,
-            _count: {
-              select: {
-                appointments: true,
-                medicalRecords: true
+      // Generate MRN
+      const mrn = await generateMRN();
+
+      // Create patient
+      const patient = await prisma.patient.create({
+        data: {
+          mrn,
+          firstName,
+          lastName,
+          dateOfBirth: new Date(dateOfBirth),
+          gender,
+          phone,
+          email,
+          address,
+          bloodType,
+          allergies,
+          medications,
+          conditions,
+          createdBy: {
+            connect: { id: req.user.id }
+          },
+          // Create related records if provided
+          ...(emergencyContact && {
+            emergencyContact: {
+              create: emergencyContact
+            }
+          }),
+          ...(insurance && {
+            insurance: {
+              create: {
+                ...insurance,
+                effectiveDate: new Date(insurance.effectiveDate),
+                expirationDate: insurance.expirationDate ? new Date(insurance.expirationDate) : null
               }
             }
-          },
-          orderBy: { [sortBy]: sortOrder },
-          skip: parseInt(skip),
-          take: parseInt(limit)
-        }),
-        prisma.patient.count({ where: searchCondition })
-      ]);
+          })
+        },
+        include: {
+          emergencyContact: true,
+          insurance: true,
+          allergiesList: true
+        }
+      });
+
+      // Log the creation
+      await prisma.accessLog.create({
+        data: {
+          userId: req.user.id,
+          action: 'CREATE',
+          resource: 'PATIENT',
+          resourceId: patient.id,
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent')
+        }
+      });
+
+      res.status(201).json(successResponse(
+        { patient },
+        'Patient created successfully',
+        201
+      ));
+
+    } catch (error) {
+      console.error('Create patient error:', error);
+      res.status(500).json(errorResponse('Failed to create patient.'));
+    }
+  },
+
+  getPatients: async (req, res) => {
+    try {
+      const { page = 1, limit = 10, search, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+      
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+      const take = parseInt(limit);
+
+      let where = {};
+
+      // Search functionality
+      if (search) {
+        where = {
+          OR: [
+            { firstName: { contains: search, mode: 'insensitive' } },
+            { lastName: { contains: search, mode: 'insensitive' } },
+            { mrn: { contains: search, mode: 'insensitive' } },
+            { email: { contains: search, mode: 'insensitive' } },
+            { phone: { contains: search, mode: 'insensitive' } }
+          ]
+        };
+      }
+
+      const patients = await prisma.patient.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          emergencyContact: true,
+          insurance: true,
+          allergiesList: true,
+          _count: {
+            select: {
+              appointments: true,
+              medicalRecords: true,
+              prescriptions: true
+            }
+          }
+        },
+        orderBy: { [sortBy]: sortOrder }
+      });
+
+      const total = await prisma.patient.count({ where });
 
       res.json(successResponse({
         patients,
@@ -328,11 +165,12 @@ const patientController = {
       }));
 
     } catch (error) {
-      next(error);
+      console.error('Get patients error:', error);
+      res.status(500).json(errorResponse('Failed to retrieve patients.'));
     }
   },
 
-  getPatient: async (req, res, next) => {
+  getPatient: async (req, res) => {
     try {
       const { id } = req.params;
 
@@ -341,36 +179,41 @@ const patientController = {
         include: {
           emergencyContact: true,
           insurance: true,
+          allergiesList: true,
           appointments: {
             include: {
-              doctor: {
-                include: { profile: true }
+              provider: {
+                include: {
+                  profile: true
+                }
               }
             },
             orderBy: { appointmentDate: 'desc' }
           },
           medicalRecords: {
             include: {
-              doctor: {
-                include: { profile: true }
-              }
+              provider: {
+                include: {
+                  profile: true
+                }
+              },
+              prescriptions: true,
+              labResults: true,
+              diagnoses: true
             },
             orderBy: { visitDate: 'desc' }
           },
           prescriptions: {
             include: {
-              doctor: {
-                include: { profile: true }
+              provider: {
+                include: {
+                  profile: true
+                }
               }
             },
             orderBy: { createdAt: 'desc' }
           },
           labResults: {
-            include: {
-              doctor: {
-                include: { profile: true }
-              }
-            },
             orderBy: { reportedAt: 'desc' }
           },
           vitalSigns: {
@@ -381,64 +224,71 @@ const patientController = {
       });
 
       if (!patient) {
-        return res.status(404).json(errorResponse('Patient not found'));
+        return res.status(404).json(errorResponse('Patient not found.', 404));
       }
 
-      // Log PHI access
-      await auditService.logPHIAccess('Patient', id, req.user, req);
+      // Log access
+      await prisma.accessLog.create({
+        data: {
+          userId: req.user.id,
+          action: 'VIEW',
+          resource: 'PATIENT',
+          resourceId: patient.id,
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent')
+        }
+      });
 
       res.json(successResponse({ patient }));
 
     } catch (error) {
-      next(error);
+      console.error('Get patient error:', error);
+      res.status(500).json(errorResponse('Failed to retrieve patient.'));
     }
   },
 
-  createPatient: async (req, res, next) => {
+  updatePatient: async (req, res) => {
     try {
-      const { error, value } = patientValidation.create.validate(req.body);
+      const { id } = req.params;
+      const { error, value } = patientValidation.update.validate(req.body);
+      
       if (error) {
-        return res.status(400).json(errorResponse(error.details[0].message));
+        return res.status(400).json(errorResponse(
+          'Validation failed',
+          400,
+          error.details.map(detail => detail.message)
+        ));
       }
 
-      const patientId = await generatePatientId(prisma);
-
-      // Encrypt sensitive data before storage
-      const encryptedData = {
-        ...value,
-        // In production, encrypt sensitive fields like:
-        // email: encrypt(value.email),
-        // phone: encrypt(value.phone),
-        // address: encrypt(value.address)
-      };
-
-      const patient = await prisma.patient.create({
-        data: {
-          patientId,
-          ...encryptedData,
-          emergencyContact: value.emergencyContact ? {
-            create: value.emergencyContact
-          } : undefined,
-          insurance: value.insurance ? {
-            create: value.insurance
-          } : undefined
-        },
+      const patient = await prisma.patient.update({
+        where: { id },
+        data: value,
         include: {
           emergencyContact: true,
-          insurance: true
+          insurance: true,
+          allergiesList: true
         }
       });
 
-      // Log patient creation
-      await auditService.logPHIModification('CREATE', 'Patient', patient.id, req.user, req, null, patient);
+      // Log update
+      await prisma.accessLog.create({
+        data: {
+          userId: req.user.id,
+          action: 'UPDATE',
+          resource: 'PATIENT',
+          resourceId: patient.id,
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent')
+        }
+      });
 
-      res.status(201).json(successResponse({ patient }, 'Patient created successfully'));
+      res.json(successResponse({ patient }, 'Patient updated successfully'));
 
     } catch (error) {
-      next(error);
+      console.error('Update patient error:', error);
+      res.status(500).json(errorResponse('Failed to update patient.'));
     }
   }
-  // ... other methods with similar audit logging
 };
 
-module.exports = { patientController };
+module.exports = patientsController;
