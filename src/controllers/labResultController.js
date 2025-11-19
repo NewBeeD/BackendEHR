@@ -315,8 +315,341 @@
 
 
 // src/controllers/labResultController.js
+// const prisma = require('../config/database');
+// const { successResponse, errorResponse } = require('../utils/utils');
+
+// const labResultController = {
+  
+//   getAllLabResults: async (req, res, next) => {
+//     try {
+//       const {
+//         page = 1,
+//         limit = 10,
+//         patientId,
+//         providerId, // ✅ Changed from doctorId to providerId
+//         testType,
+//         status,
+//         sortBy = 'reportedAt',
+//         sortOrder = 'desc'
+//       } = req.query;
+
+//       const skip = (page - 1) * limit;
+
+//       const where = {};
+//       if (patientId) where.patientId = patientId;
+//       if (providerId) where.providerId = providerId; // ✅ Changed from doctorId to providerId
+//       if (testType) where.testType = testType;
+//       if (status) where.status = status;
+
+//       const [labResults, total] = await Promise.all([
+//         prisma.labResult.findMany({
+//           where,
+//           include: {
+//             patient: {
+//               select: {
+//                 id: true,
+//                 mrn: true, // ✅ Changed from patientId to mrn
+//                 firstName: true,
+//                 lastName: true
+//               }
+//             },
+//             provider: { // ✅ Changed from doctor to provider
+//               include: {
+//                 profile: {
+//                   select: {
+//                     firstName: true,
+//                     lastName: true
+//                     // ❌ Removed specialty (doesn't exist in UserProfile)
+//                   }
+//                 },
+//                 staff: { // ✅ Added staff to get specialization
+//                   select: {
+//                     specialization: true
+//                   }
+//                 }
+//               }
+//             }
+//           },
+//           orderBy: { [sortBy]: sortOrder },
+//           skip: parseInt(skip),
+//           take: parseInt(limit)
+//         }),
+//         prisma.labResult.count({ where })
+//       ]);
+
+//       res.json(successResponse({
+//         labResults,
+//         pagination: {
+//           page: parseInt(page),
+//           limit: parseInt(limit),
+//           total,
+//           pages: Math.ceil(total / limit)
+//         }
+//       }));
+
+//     } catch (error) {
+//       next(error);
+//     }
+//   },
+
+//   getLabResult: async (req, res, next) => {
+//     try {
+//       const { id } = req.params;
+
+//       const labResult = await prisma.labResult.findUnique({
+//         where: { id },
+//         include: {
+//           patient: {
+//             include: {
+//               emergencyContact: true
+//             }
+//           },
+//           provider: { // ✅ Changed from doctor to provider
+//             include: {
+//               profile: true
+//             }
+//           }
+//         }
+//       });
+
+//       if (!labResult) {
+//         return res.status(404).json(errorResponse('Lab result not found'));
+//       }
+
+//       res.json(successResponse({ labResult }));
+
+//     } catch (error) {
+//       next(error);
+//     }
+//   },
+
+//   createLabResult: async (req, res, next) => {
+//     try {
+//       const {
+//         patientId,
+//         providerId, // ✅ Changed from doctorId to providerId
+//         testName,
+//         testType,
+//         result,
+//         normalRange,
+//         units,
+//         notes,
+//         performedAt,
+//         status = 'PENDING', // ✅ Changed from 'Pending' to match enum
+//         attachment
+//       } = req.body;
+
+//       // Validate required fields
+//       if (!patientId || !providerId || !testName || !testType || !result) {
+//         return res.status(400).json(errorResponse('Patient ID, provider ID, test name, test type, and result are required'));
+//       }
+
+//       // Check if patient exists
+//       const patient = await prisma.patient.findUnique({ where: { id: patientId } });
+//       if (!patient) {
+//         return res.status(404).json(errorResponse('Patient not found'));
+//       }
+
+//       // Check if provider exists
+//       const provider = await prisma.user.findUnique({ 
+//         where: { 
+//           id: providerId 
+//         }
+//       });
+//       if (!provider) {
+//         return res.status(404).json(errorResponse('Provider not found'));
+//       }
+
+//       const labResult = await prisma.labResult.create({
+//         data: {
+//           patientId,
+//           providerId, // ✅ Changed from doctorId to providerId
+//           testName,
+//           testType,
+//           result,
+//           normalRange,
+//           units,
+//           notes,
+//           performedAt: performedAt ? new Date(performedAt) : null,
+//           status,
+//           attachment
+//         },
+//         include: {
+//           patient: {
+//             select: {
+//               firstName: true,
+//               lastName: true
+//             }
+//           },
+//           provider: { // ✅ Changed from doctor to provider
+//             include: {
+//               profile: {
+//                 select: {
+//                   firstName: true,
+//                   lastName: true
+//                 }
+//               }
+//             }
+//           }
+//         }
+//       });
+
+//       res.status(201).json(successResponse({ labResult }, 'Lab result created successfully'));
+
+//     } catch (error) {
+//       next(error);
+//     }
+//   },
+
+//   updateLabResult: async (req, res, next) => {
+//     try {
+//       const { id } = req.params;
+//       const updateData = req.body;
+
+//       const labResult = await prisma.labResult.findUnique({ where: { id } });
+//       if (!labResult) {
+//         return res.status(404).json(errorResponse('Lab result not found'));
+//       }
+
+//       // Convert date field
+//       if (updateData.performedAt) updateData.performedAt = new Date(updateData.performedAt);
+
+//       // ✅ Rename doctorId to providerId if present
+//       if (updateData.doctorId) {
+//         updateData.providerId = updateData.doctorId;
+//         delete updateData.doctorId;
+//       }
+
+//       const updatedLabResult = await prisma.labResult.update({
+//         where: { id },
+//         data: updateData,
+//         include: {
+//           patient: {
+//             select: {
+//               firstName: true,
+//               lastName: true
+//             }
+//           },
+//           provider: { // ✅ Changed from doctor to provider
+//             include: {
+//               profile: {
+//                 select: {
+//                   firstName: true,
+//                   lastName: true
+//                 }
+//               }
+//             }
+//           }
+//         }
+//       });
+
+//       res.json(successResponse({ labResult: updatedLabResult }, 'Lab result updated successfully'));
+
+//     } catch (error) {
+//       next(error);
+//     }
+//   },
+
+//   deleteLabResult: async (req, res, next) => {
+//     try {
+//       const { id } = req.params;
+
+//       const labResult = await prisma.labResult.findUnique({ where: { id } });
+//       if (!labResult) {
+//         return res.status(404).json(errorResponse('Lab result not found'));
+//       }
+
+//       await prisma.labResult.delete({ where: { id } });
+
+//       res.json(successResponse(null, 'Lab result deleted successfully'));
+
+//     } catch (error) {
+//       next(error);
+//     }
+//   },
+
+//   getPatientLabResults: async (req, res, next) => {
+//     try {
+//       const { patientId } = req.params;
+//       const { testType, status } = req.query;
+
+//       const where = { patientId };
+//       if (testType) where.testType = testType;
+//       if (status) where.status = status;
+
+//       const labResults = await prisma.labResult.findMany({
+//         where,
+//         include: {
+//           provider: { // ✅ Changed from doctor to provider
+//             include: {
+//               profile: {
+//                 select: {
+//                   firstName: true,
+//                   lastName: true
+//                 }
+//               },
+//               staff: { // ✅ Added staff to get specialization
+//                 select: {
+//                   specialization: true
+//                 }
+//               }
+//             }
+//           }
+//         },
+//         orderBy: { reportedAt: 'desc' }
+//       });
+
+//       res.json(successResponse({ labResults }));
+
+//     } catch (error) {
+//       next(error);
+//     }
+//   },
+
+//   updateLabResultStatus: async (req, res, next) => {
+//     try {
+//       const { id } = req.params;
+//       const { status } = req.body;
+
+//       if (!status) {
+//         return res.status(400).json(errorResponse('Status is required'));
+//       }
+
+//       const labResult = await prisma.labResult.findUnique({ where: { id } });
+//       if (!labResult) {
+//         return res.status(404).json(errorResponse('Lab result not found'));
+//       }
+
+//       const updatedLabResult = await prisma.labResult.update({
+//         where: { id },
+//         data: { status },
+//         include: {
+//           patient: {
+//             select: {
+//               firstName: true,
+//               lastName: true
+//             }
+//           }
+//         }
+//       });
+
+//       res.json(successResponse({ labResult: updatedLabResult }, 'Lab result status updated successfully'));
+
+//     } catch (error) {
+//       next(error);
+//     }
+//   }
+// };
+
+// module.exports = { labResultController };
+
+
+
+
+// src/controllers/labResultController.js
 const prisma = require('../config/database');
 const { successResponse, errorResponse } = require('../utils/utils');
+const auditService = require('../services/auditService'); // Import audit service
 
 const labResultController = {
   
@@ -326,7 +659,7 @@ const labResultController = {
         page = 1,
         limit = 10,
         patientId,
-        providerId, // ✅ Changed from doctorId to providerId
+        providerId,
         testType,
         status,
         sortBy = 'reportedAt',
@@ -337,7 +670,7 @@ const labResultController = {
 
       const where = {};
       if (patientId) where.patientId = patientId;
-      if (providerId) where.providerId = providerId; // ✅ Changed from doctorId to providerId
+      if (providerId) where.providerId = providerId;
       if (testType) where.testType = testType;
       if (status) where.status = status;
 
@@ -348,21 +681,20 @@ const labResultController = {
             patient: {
               select: {
                 id: true,
-                mrn: true, // ✅ Changed from patientId to mrn
+                mrn: true,
                 firstName: true,
                 lastName: true
               }
             },
-            provider: { // ✅ Changed from doctor to provider
+            provider: {
               include: {
                 profile: {
                   select: {
                     firstName: true,
                     lastName: true
-                    // ❌ Removed specialty (doesn't exist in UserProfile)
                   }
                 },
-                staff: { // ✅ Added staff to get specialization
+                staff: {
                   select: {
                     specialization: true
                   }
@@ -376,6 +708,14 @@ const labResultController = {
         }),
         prisma.labResult.count({ where })
       ]);
+
+      // Audit log for listing lab results
+      await auditService.log('LIST', 'LabResult', {
+        userId: req.user?.id,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Listed ${labResults.length} lab results with filters`
+      });
 
       res.json(successResponse({
         labResults,
@@ -404,7 +744,7 @@ const labResultController = {
               emergencyContact: true
             }
           },
-          provider: { // ✅ Changed from doctor to provider
+          provider: {
             include: {
               profile: true
             }
@@ -415,6 +755,9 @@ const labResultController = {
       if (!labResult) {
         return res.status(404).json(errorResponse('Lab result not found'));
       }
+
+      // HIPAA audit log for PHI access
+      await auditService.logPHIAccess('LabResult', id, req.user, req);
 
       res.json(successResponse({ labResult }));
 
@@ -427,7 +770,7 @@ const labResultController = {
     try {
       const {
         patientId,
-        providerId, // ✅ Changed from doctorId to providerId
+        providerId,
         testName,
         testType,
         result,
@@ -435,7 +778,7 @@ const labResultController = {
         units,
         notes,
         performedAt,
-        status = 'PENDING', // ✅ Changed from 'Pending' to match enum
+        status = 'PENDING',
         attachment
       } = req.body;
 
@@ -463,7 +806,7 @@ const labResultController = {
       const labResult = await prisma.labResult.create({
         data: {
           patientId,
-          providerId, // ✅ Changed from doctorId to providerId
+          providerId,
           testName,
           testType,
           result,
@@ -481,7 +824,7 @@ const labResultController = {
               lastName: true
             }
           },
-          provider: { // ✅ Changed from doctor to provider
+          provider: {
             include: {
               profile: {
                 select: {
@@ -492,6 +835,15 @@ const labResultController = {
             }
           }
         }
+      });
+
+      // HIPAA audit log for PHI creation
+      await auditService.logPHICreation('LabResult', labResult.id, req.user, req, {
+        patientId,
+        testName,
+        testType,
+        result,
+        status
       });
 
       res.status(201).json(successResponse({ labResult }, 'Lab result created successfully'));
@@ -511,10 +863,13 @@ const labResultController = {
         return res.status(404).json(errorResponse('Lab result not found'));
       }
 
+      // Store old values for audit
+      const oldValues = { ...labResult };
+
       // Convert date field
       if (updateData.performedAt) updateData.performedAt = new Date(updateData.performedAt);
 
-      // ✅ Rename doctorId to providerId if present
+      // Rename doctorId to providerId if present
       if (updateData.doctorId) {
         updateData.providerId = updateData.doctorId;
         delete updateData.doctorId;
@@ -530,7 +885,7 @@ const labResultController = {
               lastName: true
             }
           },
-          provider: { // ✅ Changed from doctor to provider
+          provider: {
             include: {
               profile: {
                 select: {
@@ -542,6 +897,9 @@ const labResultController = {
           }
         }
       });
+
+      // HIPAA audit log for PHI update
+      await auditService.logPHIUpdate('LabResult', id, req.user, req, oldValues, updateData);
 
       res.json(successResponse({ labResult: updatedLabResult }, 'Lab result updated successfully'));
 
@@ -559,7 +917,13 @@ const labResultController = {
         return res.status(404).json(errorResponse('Lab result not found'));
       }
 
+      // Store old values for audit before deletion
+      const oldValues = { ...labResult };
+
       await prisma.labResult.delete({ where: { id } });
+
+      // HIPAA audit log for PHI deletion
+      await auditService.logPHIDeletion('LabResult', id, req.user, req, oldValues);
 
       res.json(successResponse(null, 'Lab result deleted successfully'));
 
@@ -580,7 +944,7 @@ const labResultController = {
       const labResults = await prisma.labResult.findMany({
         where,
         include: {
-          provider: { // ✅ Changed from doctor to provider
+          provider: {
             include: {
               profile: {
                 select: {
@@ -588,7 +952,7 @@ const labResultController = {
                   lastName: true
                 }
               },
-              staff: { // ✅ Added staff to get specialization
+              staff: {
                 select: {
                   specialization: true
                 }
@@ -598,6 +962,9 @@ const labResultController = {
         },
         orderBy: { reportedAt: 'desc' }
       });
+
+      // HIPAA audit log for PHI access (patient-specific)
+      await auditService.logPHIAccess('LabResult', null, req.user, req);
 
       res.json(successResponse({ labResults }));
 
@@ -620,6 +987,9 @@ const labResultController = {
         return res.status(404).json(errorResponse('Lab result not found'));
       }
 
+      // Store old status for audit
+      const oldValues = { status: labResult.status };
+
       const updatedLabResult = await prisma.labResult.update({
         where: { id },
         data: { status },
@@ -632,6 +1002,9 @@ const labResultController = {
           }
         }
       });
+
+      // Audit log for status update
+      await auditService.logPHIUpdate('LabResult', id, req.user, req, oldValues, { status });
 
       res.json(successResponse({ labResult: updatedLabResult }, 'Lab result status updated successfully'));
 

@@ -10,7 +10,7 @@
 //         page = 1,
 //         limit = 10,
 //         patientId,
-//         providerId,
+//         providerId, // ✅ Changed from doctorId to providerId
 //         status,
 //         sortBy = 'createdAt',
 //         sortOrder = 'desc'
@@ -20,7 +20,7 @@
 
 //       const where = {};
 //       if (patientId) where.patientId = patientId;
-//       if (doctorId) where.doctorId = providerId;
+//       if (providerId) where.providerId = providerId; // ✅ Changed from doctorId to providerId
 //       if (status) where.status = status;
 
 //       const [prescriptions, total] = await Promise.all([
@@ -30,18 +30,18 @@
 //             patient: {
 //               select: {
 //                 id: true,
-//                 mrn: true,
+//                 mrn: true, // ✅ Changed from patientId to mrn
 //                 firstName: true,
 //                 lastName: true
 //               }
 //             },
-//             provider: {
+//             provider: { // ✅ Changed from doctor to provider
 //               include: {
 //                 profile: {
 //                   select: {
 //                     firstName: true,
-//                     lastName: true,
-//                     // specialty: true
+//                     lastName: true
+//                     // ❌ Removed specialty (doesn't exist in UserProfile)
 //                   }
 //                 },
 //                 staff: { // ✅ Added staff to get specialization
@@ -53,7 +53,7 @@
 //             },
 //             medicalRecord: {
 //               select: {
-//                 diagnosis: true,
+//                 id: true,
 //                 visitDate: true,
 //                 diagnoses: { // ✅ Added diagnoses relation
 //                   select: {
@@ -97,7 +97,7 @@
 //               emergencyContact: true
 //             }
 //           },
-//           provider: {
+//           provider: { // ✅ Changed from doctor to provider
 //             include: {
 //               profile: true
 //             }
@@ -121,7 +121,7 @@
 //     try {
 //       const {
 //         patientId,
-//         providerId,
+//         providerId, // ✅ Changed from doctorId to providerId
 //         medicalRecordId,
 //         medication,
 //         dosage,
@@ -134,8 +134,8 @@
 //       } = req.body;
 
 //       // Validate required fields
-//       if (!patientId || !doctorId || !medication || !dosage || !frequency || !duration || !startDate) {
-//         return res.status(400).json(errorResponse('Patient ID, doctor ID, medication, dosage, frequency, duration, and start date are required'));
+//       if (!patientId || !providerId || !medication || !dosage || !frequency || !duration || !startDate) {
+//         return res.status(400).json(errorResponse('Patient ID, provider ID, medication, dosage, frequency, duration, and start date are required'));
 //       }
 
 //       // Check if patient exists
@@ -144,15 +144,20 @@
 //         return res.status(404).json(errorResponse('Patient not found'));
 //       }
 
-//       // Check if doctor exists
-//       const doctor = await prisma.user.findUnique({ 
+//       // Check if provider exists and has appropriate role
+//       const provider = await prisma.user.findUnique({ 
 //         where: { 
-//           id: doctorId,
-//           role: 'Doctor'
+//           id: providerId
 //         }
 //       });
-//       if (!doctor) {
-//         return res.status(404).json(errorResponse('Doctor not found'));
+//       if (!provider) {
+//         return res.status(404).json(errorResponse('Provider not found'));
+//       }
+
+//       // Check if provider is a doctor or has prescribing privileges
+//       const allowedRoles = ['DOCTOR', 'NURSE_PRACTITIONER', 'PHYSICIAN_ASSISTANT'];
+//       if (!allowedRoles.includes(provider.role)) {
+//         return res.status(403).json(errorResponse('This user does not have prescribing privileges'));
 //       }
 
 //       // If medicalRecordId is provided, verify it exists
@@ -168,7 +173,7 @@
 //       const prescription = await prisma.prescription.create({
 //         data: {
 //           patientId,
-//           doctorId,
+//           providerId, // ✅ Changed from doctorId to providerId
 //           medicalRecordId,
 //           medication,
 //           dosage,
@@ -186,7 +191,7 @@
 //               lastName: true
 //             }
 //           },
-//           doctor: {
+//           provider: { // ✅ Changed from doctor to provider
 //             include: {
 //               profile: {
 //                 select: {
@@ -221,6 +226,12 @@
 //       if (updateData.endDate) updateData.endDate = new Date(updateData.endDate);
 //       if (updateData.refills) updateData.refills = parseInt(updateData.refills);
 
+//       // ✅ Rename doctorId to providerId if present
+//       if (updateData.doctorId) {
+//         updateData.providerId = updateData.doctorId;
+//         delete updateData.doctorId;
+//       }
+
 //       const updatedPrescription = await prisma.prescription.update({
 //         where: { id },
 //         data: updateData,
@@ -231,7 +242,7 @@
 //               lastName: true
 //             }
 //           },
-//           doctor: {
+//           provider: { // ✅ Changed from doctor to provider
 //             include: {
 //               profile: {
 //                 select: {
@@ -280,21 +291,30 @@
 //       const prescriptions = await prisma.prescription.findMany({
 //         where,
 //         include: {
-//           doctor: {
+//           provider: { // ✅ Changed from doctor to provider
 //             include: {
 //               profile: {
 //                 select: {
 //                   firstName: true,
-//                   lastName: true,
-//                   specialty: true
+//                   lastName: true
+//                 }
+//               },
+//               staff: { // ✅ Added staff to get specialization
+//                 select: {
+//                   specialization: true
 //                 }
 //               }
 //             }
 //           },
 //           medicalRecord: {
 //             select: {
-//               diagnosis: true,
-//               visitDate: true
+//               id: true,
+//               visitDate: true,
+//               diagnoses: { // ✅ Added diagnoses relation
+//                 select: {
+//                   description: true
+//                 }
+//               }
 //             }
 //           }
 //         },
@@ -346,8 +366,10 @@
 // module.exports = { prescriptionController };
 
 
+
 // src/controllers/prescriptionController.js
 const prisma = require('../config/database');
+const auditService = require('../services/auditService');
 const { successResponse, errorResponse } = require('../utils/utils');
 
 const prescriptionController = {
@@ -358,7 +380,7 @@ const prescriptionController = {
         page = 1,
         limit = 10,
         patientId,
-        providerId, // ✅ Changed from doctorId to providerId
+        providerId,
         status,
         sortBy = 'createdAt',
         sortOrder = 'desc'
@@ -368,7 +390,7 @@ const prescriptionController = {
 
       const where = {};
       if (patientId) where.patientId = patientId;
-      if (providerId) where.providerId = providerId; // ✅ Changed from doctorId to providerId
+      if (providerId) where.providerId = providerId;
       if (status) where.status = status;
 
       const [prescriptions, total] = await Promise.all([
@@ -378,21 +400,20 @@ const prescriptionController = {
             patient: {
               select: {
                 id: true,
-                mrn: true, // ✅ Changed from patientId to mrn
+                mrn: true,
                 firstName: true,
                 lastName: true
               }
             },
-            provider: { // ✅ Changed from doctor to provider
+            provider: {
               include: {
                 profile: {
                   select: {
                     firstName: true,
                     lastName: true
-                    // ❌ Removed specialty (doesn't exist in UserProfile)
                   }
                 },
-                staff: { // ✅ Added staff to get specialization
+                staff: {
                   select: {
                     specialization: true
                   }
@@ -403,7 +424,7 @@ const prescriptionController = {
               select: {
                 id: true,
                 visitDate: true,
-                diagnoses: { // ✅ Added diagnoses relation
+                diagnoses: {
                   select: {
                     description: true
                   }
@@ -418,6 +439,14 @@ const prescriptionController = {
         prisma.prescription.count({ where })
       ]);
 
+      // ✅ AUDIT: Log prescription list access
+      await auditService.log('VIEW_LIST', 'Prescription', {
+        userId: req.user.id,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Accessed prescriptions list - ${prescriptions.length} records, filters: ${JSON.stringify({ patientId, providerId, status })}`
+      });
+
       res.json(successResponse({
         prescriptions,
         pagination: {
@@ -429,6 +458,13 @@ const prescriptionController = {
       }));
 
     } catch (error) {
+      // ✅ AUDIT: Log prescription list access error
+      await auditService.log('VIEW_LIST_ERROR', 'Prescription', {
+        userId: req.user.id,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Prescription list access error: ${error.message}`
+      });
       next(error);
     }
   },
@@ -445,7 +481,7 @@ const prescriptionController = {
               emergencyContact: true
             }
           },
-          provider: { // ✅ Changed from doctor to provider
+          provider: {
             include: {
               profile: true
             }
@@ -455,12 +491,30 @@ const prescriptionController = {
       });
 
       if (!prescription) {
+        // ✅ AUDIT: Log attempt to access non-existent prescription
+        await auditService.log('VIEW_NOT_FOUND', 'Prescription', {
+          userId: req.user.id,
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent'),
+          description: `Attempted to access non-existent prescription: ${id}`
+        });
+        
         return res.status(404).json(errorResponse('Prescription not found'));
       }
+
+      // ✅ AUDIT: Log prescription access
+      await auditService.logPHIAccess('Prescription', id, req.user, req);
 
       res.json(successResponse({ prescription }));
 
     } catch (error) {
+      // ✅ AUDIT: Log prescription access error
+      await auditService.log('VIEW_ERROR', 'Prescription', {
+        userId: req.user.id,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Prescription access error: ${error.message}`
+      });
       next(error);
     }
   },
@@ -469,7 +523,7 @@ const prescriptionController = {
     try {
       const {
         patientId,
-        providerId, // ✅ Changed from doctorId to providerId
+        providerId,
         medicalRecordId,
         medication,
         dosage,
@@ -483,12 +537,28 @@ const prescriptionController = {
 
       // Validate required fields
       if (!patientId || !providerId || !medication || !dosage || !frequency || !duration || !startDate) {
+        // ✅ AUDIT: Log validation failure
+        await auditService.log('CREATE_VALIDATION_FAILED', 'Prescription', {
+          userId: req.user.id,
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent'),
+          description: `Prescription creation validation failed - missing required fields`
+        });
+        
         return res.status(400).json(errorResponse('Patient ID, provider ID, medication, dosage, frequency, duration, and start date are required'));
       }
 
       // Check if patient exists
       const patient = await prisma.patient.findUnique({ where: { id: patientId } });
       if (!patient) {
+        // ✅ AUDIT: Log failed prescription creation - patient not found
+        await auditService.log('CREATE_FAILED', 'Prescription', {
+          userId: req.user.id,
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent'),
+          description: `Prescription creation failed - patient not found: ${patientId}`
+        });
+        
         return res.status(404).json(errorResponse('Patient not found'));
       }
 
@@ -499,12 +569,28 @@ const prescriptionController = {
         }
       });
       if (!provider) {
+        // ✅ AUDIT: Log failed prescription creation - provider not found
+        await auditService.log('CREATE_FAILED', 'Prescription', {
+          userId: req.user.id,
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent'),
+          description: `Prescription creation failed - provider not found: ${providerId}`
+        });
+        
         return res.status(404).json(errorResponse('Provider not found'));
       }
 
       // Check if provider is a doctor or has prescribing privileges
       const allowedRoles = ['DOCTOR', 'NURSE_PRACTITIONER', 'PHYSICIAN_ASSISTANT'];
       if (!allowedRoles.includes(provider.role)) {
+        // ✅ AUDIT: Log unauthorized prescription creation attempt
+        await auditService.log('CREATE_UNAUTHORIZED', 'Prescription', {
+          userId: req.user.id,
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent'),
+          description: `Prescription creation failed - provider role not allowed: ${provider.role}`
+        });
+        
         return res.status(403).json(errorResponse('This user does not have prescribing privileges'));
       }
 
@@ -514,6 +600,14 @@ const prescriptionController = {
           where: { id: medicalRecordId }
         });
         if (!medicalRecord) {
+          // ✅ AUDIT: Log failed prescription creation - medical record not found
+          await auditService.log('CREATE_FAILED', 'Prescription', {
+            userId: req.user.id,
+            ipAddress: req.ip,
+            userAgent: req.get('User-Agent'),
+            description: `Prescription creation failed - medical record not found: ${medicalRecordId}`
+          });
+          
           return res.status(404).json(errorResponse('Medical record not found'));
         }
       }
@@ -521,7 +615,7 @@ const prescriptionController = {
       const prescription = await prisma.prescription.create({
         data: {
           patientId,
-          providerId, // ✅ Changed from doctorId to providerId
+          providerId,
           medicalRecordId,
           medication,
           dosage,
@@ -539,7 +633,7 @@ const prescriptionController = {
               lastName: true
             }
           },
-          provider: { // ✅ Changed from doctor to provider
+          provider: {
             include: {
               profile: {
                 select: {
@@ -552,9 +646,19 @@ const prescriptionController = {
         }
       });
 
+      // ✅ AUDIT: Log prescription creation
+      await auditService.logPHICreation('Prescription', prescription.id, req.user, req, prescription);
+
       res.status(201).json(successResponse({ prescription }, 'Prescription created successfully'));
 
     } catch (error) {
+      // ✅ AUDIT: Log prescription creation error
+      await auditService.log('CREATE_ERROR', 'Prescription', {
+        userId: req.user.id,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Prescription creation error: ${error.message}`
+      });
       next(error);
     }
   },
@@ -564,8 +668,24 @@ const prescriptionController = {
       const { id } = req.params;
       const updateData = req.body;
 
-      const prescription = await prisma.prescription.findUnique({ where: { id } });
-      if (!prescription) {
+      // Get old prescription data for audit
+      const oldPrescription = await prisma.prescription.findUnique({ 
+        where: { id },
+        include: {
+          patient: true,
+          provider: true
+        }
+      });
+
+      if (!oldPrescription) {
+        // ✅ AUDIT: Log attempt to update non-existent prescription
+        await auditService.log('UPDATE_NOT_FOUND', 'Prescription', {
+          userId: req.user.id,
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent'),
+          description: `Attempted to update non-existent prescription: ${id}`
+        });
+        
         return res.status(404).json(errorResponse('Prescription not found'));
       }
 
@@ -574,7 +694,7 @@ const prescriptionController = {
       if (updateData.endDate) updateData.endDate = new Date(updateData.endDate);
       if (updateData.refills) updateData.refills = parseInt(updateData.refills);
 
-      // ✅ Rename doctorId to providerId if present
+      // Rename doctorId to providerId if present
       if (updateData.doctorId) {
         updateData.providerId = updateData.doctorId;
         delete updateData.doctorId;
@@ -590,7 +710,7 @@ const prescriptionController = {
               lastName: true
             }
           },
-          provider: { // ✅ Changed from doctor to provider
+          provider: {
             include: {
               profile: {
                 select: {
@@ -603,9 +723,19 @@ const prescriptionController = {
         }
       });
 
+      // ✅ AUDIT: Log prescription update with before/after data
+      await auditService.logPHIUpdate('Prescription', id, req.user, req, oldPrescription, updatedPrescription);
+
       res.json(successResponse({ prescription: updatedPrescription }, 'Prescription updated successfully'));
 
     } catch (error) {
+      // ✅ AUDIT: Log prescription update error
+      await auditService.log('UPDATE_ERROR', 'Prescription', {
+        userId: req.user.id,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Prescription update error: ${error.message}`
+      });
       next(error);
     }
   },
@@ -614,16 +744,42 @@ const prescriptionController = {
     try {
       const { id } = req.params;
 
-      const prescription = await prisma.prescription.findUnique({ where: { id } });
+      // Get prescription data before deletion for audit
+      const prescription = await prisma.prescription.findUnique({ 
+        where: { id },
+        include: {
+          patient: true,
+          provider: true
+        }
+      });
+
       if (!prescription) {
+        // ✅ AUDIT: Log attempt to delete non-existent prescription
+        await auditService.log('DELETE_NOT_FOUND', 'Prescription', {
+          userId: req.user.id,
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent'),
+          description: `Attempted to delete non-existent prescription: ${id}`
+        });
+        
         return res.status(404).json(errorResponse('Prescription not found'));
       }
 
       await prisma.prescription.delete({ where: { id } });
 
+      // ✅ AUDIT: Log prescription deletion
+      await auditService.logPHIDeletion('Prescription', id, req.user, req, prescription);
+
       res.json(successResponse(null, 'Prescription deleted successfully'));
 
     } catch (error) {
+      // ✅ AUDIT: Log prescription deletion error
+      await auditService.log('DELETE_ERROR', 'Prescription', {
+        userId: req.user.id,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Prescription deletion error: ${error.message}`
+      });
       next(error);
     }
   },
@@ -633,13 +789,27 @@ const prescriptionController = {
       const { patientId } = req.params;
       const { status } = req.query;
 
+      // Verify patient exists
+      const patient = await prisma.patient.findUnique({ where: { id: patientId } });
+      if (!patient) {
+        // ✅ AUDIT: Log attempt to access prescriptions for non-existent patient
+        await auditService.log('VIEW_PATIENT_NOT_FOUND', 'Prescription', {
+          userId: req.user.id,
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent'),
+          description: `Attempted to access prescriptions for non-existent patient: ${patientId}`
+        });
+        
+        return res.status(404).json(errorResponse('Patient not found'));
+      }
+
       const where = { patientId };
       if (status) where.status = status;
 
       const prescriptions = await prisma.prescription.findMany({
         where,
         include: {
-          provider: { // ✅ Changed from doctor to provider
+          provider: {
             include: {
               profile: {
                 select: {
@@ -647,7 +817,7 @@ const prescriptionController = {
                   lastName: true
                 }
               },
-              staff: { // ✅ Added staff to get specialization
+              staff: {
                 select: {
                   specialization: true
                 }
@@ -658,7 +828,7 @@ const prescriptionController = {
             select: {
               id: true,
               visitDate: true,
-              diagnoses: { // ✅ Added diagnoses relation
+              diagnoses: {
                 select: {
                   description: true
                 }
@@ -669,9 +839,24 @@ const prescriptionController = {
         orderBy: { createdAt: 'desc' }
       });
 
+      // ✅ AUDIT: Log patient prescriptions access
+      await auditService.log('VIEW_PATIENT', 'Prescription', {
+        userId: req.user.id,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Accessed prescriptions for patient: ${patientId} (${prescriptions.length} records)`
+      });
+
       res.json(successResponse({ prescriptions }));
 
     } catch (error) {
+      // ✅ AUDIT: Log patient prescriptions access error
+      await auditService.log('VIEW_PATIENT_ERROR', 'Prescription', {
+        userId: req.user.id,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Patient prescriptions access error: ${error.message}`
+      });
       next(error);
     }
   },
@@ -682,11 +867,33 @@ const prescriptionController = {
       const { status } = req.body;
 
       if (!status) {
+        // ✅ AUDIT: Log status update validation failure
+        await auditService.log('UPDATE_STATUS_VALIDATION_FAILED', 'Prescription', {
+          userId: req.user.id,
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent'),
+          description: `Prescription status update validation failed - status required`
+        });
+        
         return res.status(400).json(errorResponse('Status is required'));
       }
 
-      const prescription = await prisma.prescription.findUnique({ where: { id } });
+      const prescription = await prisma.prescription.findUnique({ 
+        where: { id },
+        include: {
+          patient: true
+        }
+      });
+
       if (!prescription) {
+        // ✅ AUDIT: Log attempt to update status of non-existent prescription
+        await auditService.log('UPDATE_STATUS_NOT_FOUND', 'Prescription', {
+          userId: req.user.id,
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent'),
+          description: `Attempted to update status of non-existent prescription: ${id}`
+        });
+        
         return res.status(404).json(errorResponse('Prescription not found'));
       }
 
@@ -703,9 +910,26 @@ const prescriptionController = {
         }
       });
 
+      // ✅ AUDIT: Log prescription status update
+      await auditService.log('UPDATE_STATUS', 'Prescription', {
+        userId: req.user.id,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Updated prescription status from ${prescription.status} to ${status}`,
+        oldValues: { status: prescription.status },
+        newValues: { status: status }
+      });
+
       res.json(successResponse({ prescription: updatedPrescription }, 'Prescription status updated successfully'));
 
     } catch (error) {
+      // ✅ AUDIT: Log prescription status update error
+      await auditService.log('UPDATE_STATUS_ERROR', 'Prescription', {
+        userId: req.user.id,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Prescription status update error: ${error.message}`
+      });
       next(error);
     }
   }
