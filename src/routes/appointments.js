@@ -30,7 +30,7 @@ router.use(auth);
 
 router.get('/', appointmentController.getAllAppointments);
 router.get('/today', appointmentController.getTodayAppointments);
-router.get('/provider/:providerId', appointmentController.getProviderAppointments); // ✅ Changed from doctor to provider
+router.get('/provider/:providerId', appointmentController.getProviderAppointments); 
 router.get('/:id', appointmentController.getAppointment);
 router.post('/', authorize('Admin', 'Doctor', 'Receptionist'), appointmentController.createAppointment);
 router.put('/:id', authorize('Admin', 'Doctor', 'Receptionist'), appointmentController.updateAppointment);

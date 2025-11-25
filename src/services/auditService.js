@@ -90,10 +90,42 @@ const prisma = require('../config/database');
 
 const auditService = {
   
-  log: async (action, tableName, options = {}) => {
+  // log: async (action, tableName, options = {}) => {
     
-    try {
+  //   try {
       
+  //     const {
+  //       recordId = null,
+  //       userId = null,
+  //       ipAddress = null,
+  //       userAgent = null,
+  //       oldValues = null,
+  //       newValues = null,
+  //       description = null
+  //     } = options;
+
+  //     await prisma.auditLog.create({
+  //       data: {
+  //         userId,
+  //         action,
+  //         tableName,
+  //         recordId,
+  //         oldValues,
+  //         newValues,
+  //         ipAddress,
+  //         userAgent,
+  //         description
+  //       }
+  //     });
+  //   } catch (error) {
+  //     console.error('Audit log failed:', error);
+  //     // Don't throw error as audit failure shouldn't break main functionality
+  //   }
+  // },
+
+
+    log: async (action, tableName, options = {}) => {
+    try {
       const {
         recordId = null,
         userId = null,
@@ -104,18 +136,33 @@ const auditService = {
         description = null
       } = options;
 
+      const data = {
+        action,
+        tableName,
+        oldValues,
+        newValues,
+        ipAddress,
+        userAgent,
+        description
+      };
+
+      // Use relation instead of userId field
+      if (userId) {
+        data.user = {
+          connect: { id: userId }
+        };
+      }
+
+      // Handle recordId - ensure it's never null
+      if (recordId) {
+        data.recordId = recordId;
+      } else {
+        // For authentication events without a specific record, use userId or system
+        data.recordId = userId || 'system';
+      }
+
       await prisma.auditLog.create({
-        data: {
-          userId,
-          action,
-          tableName,
-          recordId,
-          oldValues,
-          newValues,
-          ipAddress,
-          userAgent,
-          description
-        }
+        data
       });
     } catch (error) {
       console.error('Audit log failed:', error);

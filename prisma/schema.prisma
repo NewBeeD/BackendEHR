@@ -358,16 +358,18 @@ model AccessLog {
 
 model AuditLog {
   id          String   @id @default(cuid())
-  userId      String
+  userId      String?
   action      String
   tableName   String
   recordId    String
   oldValues   Json?
   newValues   Json?
   ipAddress   String?
+  userAgent   String?    // ADD THIS FIELD
+  description String?    // ADD THIS FIELD
   createdAt   DateTime @default(now())
 
-  user        User     @relation(fields: [userId], references: [id]) // FIXED: Now has opposite relation in User
+  user        User?     @relation(fields: [userId], references: [id]) // FIXED: Now has opposite relation in User
 
   @@map("audit_logs")
 }

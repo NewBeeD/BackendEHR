@@ -26,31 +26,31 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-// // Enhanced rate limiting
-// const authLimiter = rateLimit({
-//   windowMs: 15 * 60 * 1000,
-//   max: parseInt(process.env.AUTH_RATE_LIMIT) || 5,
-//   message: {
-//     status: 'error',
-//     message: 'Too many authentication attempts, please try again later.'
-//   }
-// });
+// Enhanced rate limiting
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.AUTH_RATE_LIMIT) || 5,
+  message: {
+    status: 'error',
+    message: 'Too many authentication attempts, please try again later.'
+  }
+});
 
-// const sensitiveLimiter = rateLimit({
-//   windowMs: 15 * 60 * 1000,
-//   max: parseInt(process.env.SENSITIVE_RATE_LIMIT) || 10,
-//   message: {
-//     status: 'error',
-//     message: 'Too many requests, please try again later.'
-//   }
-// });
-
-
+const sensitiveLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.SENSITIVE_RATE_LIMIT) || 10,
+  message: {
+    status: 'error',
+    message: 'Too many requests, please try again later.'
+  }
+});
 
 
-// app.use('/api/auth', authLimiter);
-// app.use('/api/patients', sensitiveLimiter);
-// app.use('/api/medical-records', sensitiveLimiter);
+
+
+app.use('/api/auth', authLimiter);
+app.use('/api/patients', sensitiveLimiter);
+app.use('/api/medical-records', sensitiveLimiter);
 
 // // Body parsing with limits
 app.use(express.json({ limit: '1mb' })); // Limit payload size
